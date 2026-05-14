@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ESP32 Rolling Door PWA — Implementation Plan</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="report-shell">
+      <nav class="top-nav" aria-label="Plan sections">
+        <div class="brand-mark">
+          <span class="m-stripe" aria-hidden="true"><span></span><span></span><span></span></span>
+          ESP32 Rolling Door
+        </div>
+        <div class="nav-links">
+          <a href="#safety">Safety</a>
+          <a href="#architecture">Architecture</a>
+          <a href="#decisions">Decisions</a>
+          <a href="#wiring">Wiring</a>
+          <a href="#mqtt">MQTT</a>
+          <a href="#tasks">Tasks</a>
+          <a href="#hardware">Hardware</a>
+          <a href="#testing">Testing</a>
+          <a href="#future">Future</a>
+        </div>
+      </nav>
+
+      <header id="overview" class="hero-photo-band">
+        <div class="hero-content">
+          <p class="eyebrow">Implementation Plan · Revision Alpha</p>
+          <h1>Rolling door, family-safe.</h1>
+          <p class="lead">An ESP32 + 4-channel relay simulates the wall-panel buttons — Mở, Dừng, Đóng — so a phone or PWA can open and close the rolling door without ever touching the motor, capacitor, or 220V mains. The original RF remote and physical buttons keep working.</p>
+          <div class="badge-row">
+            <span class="badge low">ESP32</span>
+            <span class="badge low">4-ch relay</span>
+            <span class="badge low">HiveMQ Cloud</span>
+            <span class="badge low">React PWA</span>
+            <span class="badge low">Vercel</span>
+          </div>
+        </div>
+      </header>
+
+      <section id="safety" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Safety principle</p>
+            <h2>Never touch the motor side.</h2>
+          </div>
+          <p>The ESP32 only closes a dry contact in parallel with the existing wall buttons. It is electrically isolated from the door motor, the capacitor, and the 220V mains.</p>
+        </div>
+
+        <div class="callout danger">
+          <h3>Hard rule</h3>
+          <p>Do not wire the ESP32 or relay directly to the motor, capacitor, mains 220V, or motor power lines. The relay must only bridge the existing wall-panel button terminals using <strong>COM + NO</strong>.</p>
+        </div>
+
+        <div class="grid two">
+          <article class="card soft">
+            <p class="eyebrow">Control path</p>
+<pre>Phone / PWA
+  ↓
+MQTT / Local Web
+  ↓
+ESP32
+  ↓
+Relay COM + NO (dry contact)
+  ↓
+Existing wall-panel button terminals
+  ↓
+Original door controller
+  ↓
+Door motor</pre>
+          </article>
+          <article class="card soft">
+            <p class="eyebrow">Why it stays safe</p>
+            <p>Relay contacts sit in parallel with the existing wall buttons. If the ESP32 is offline, unplugged, or rebooting, the wall panel and RF remote continue to work normally.</p>
+            <p>Firmware sets every relay pin to OFF (HIGH for low-trigger) immediately on boot, so no relay can be stuck ON after a power-loss event.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="architecture" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Architecture</p>
+            <h2>Two phases.</h2>
+          </div>
+          <p>Phase 1 ships local-first to verify ESP32, relay, and pulse logic. Phase 2 layers on cloud control through HiveMQ so the PWA works from anywhere.</p>
+        </div>
+
+        <div class="comparison-grid">
+          <div>
+            <p class="eyebrow">Phase 1 · Local test first</p>
+            <h3>Local Wi-Fi only.</h3>
+<pre>Phone browser
+  ↓ local Wi-Fi
+ESP32 local web page
+  ↓ GPIO pulse
+Relay module
+  ↓ COM + NO
+Wall-panel button terminals</pre>
+            <p>Verify ESP32, relay, and button-pulse logic before adding any cloud dependency.</p>
+          </div>
+          <div>
+            <p class="eyebrow">Phase 2 · Cloud PWA control</p>
+            <h3>Outside-the-home access.</h3>
+<pre>Phone / PWA
+  ↓ WSS
+HiveMQ Cloud MQTT broker
+  ↓ MQTTS
+ESP32
+  ↓ Relay dry contact
+Wall-panel button terminals</pre>
+            <p>MQTT over WebSocket for the PWA, MQTTS for the ESP32. Same hardware, same safety boundary.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="decisions" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Key decisions</p>
+            <h2>What is locked in.</h2>
+          </div>
+          <p>Decisions made before any code or wiring. Anything not on this list is open for change.</p>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr><th>Aspect</th><th>Decision</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>First milestone</td><td>ESP32 local web control</td></tr>
+            <tr><td>Final client</td><td>React PWA hosted on Vercel</td></tr>
+            <tr><td>Cloud communication</td><td>MQTT over WebSocket for PWA, MQTTS for ESP32</td></tr>
+            <tr><td>MQTT broker</td><td>HiveMQ Cloud free serverless cluster</td></tr>
+            <tr><td>Hardware action</td><td>Relay dry-contact pulse to wall-panel button terminals</td></tr>
+            <tr><td>Existing controls</td><td>RF remote and wall panel remain functional</td></tr>
+            <tr><td>Relay module</td><td>4-channel 5VDC opto-isolated low-trigger</td></tr>
+            <tr><td>Relay logic</td><td><code>LOW = ON</code>, <code>HIGH = OFF</code></td></tr>
+            <tr><td>Pulse duration</td><td>300–800 ms, default 500 ms</td></tr>
+            <tr><td>Door status</td><td>Command/status only at first, not true door position</td></tr>
+            <tr><td>Future sensor</td><td>Reed switch / limit sensor for real open-close status</td></tr>
+            <tr><td>Security v1</td><td>MQTT credentials + hard-to-guess topic prefix + UI PIN</td></tr>
+            <tr><td>Security later</td><td>Backend auth, per-user access, no MQTT credentials in frontend</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="wiring" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Wiring · GPIO mapping</p>
+            <h2>One mapping, used everywhere.</h2>
+          </div>
+          <p>Firmware, wiring diagrams, and documentation must all use this exact mapping. Inconsistent mapping is the most common source of installation mistakes.</p>
+        </div>
+
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Function</th>
+                <th>ESP32 GPIO</th>
+                <th>Relay input</th>
+                <th>Relay contact</th>
+                <th>Wall-panel button</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Mở / Lên</td><td><code>GPIO16</code></td><td>IN1</td><td>Relay 1 COM + NO</td><td>Open / Up</td></tr>
+              <tr><td>Dừng</td><td><code>GPIO17</code></td><td>IN2</td><td>Relay 2 COM + NO</td><td>Stop</td></tr>
+              <tr><td>Đóng / Xuống</td><td><code>GPIO18</code></td><td>IN3</td><td>Relay 3 COM + NO</td><td>Close / Down</td></tr>
+              <tr><td>Spare</td><td>—</td><td>IN4</td><td>Relay 4</td><td>Leave empty</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid two">
+          <article class="card soft">
+            <p class="eyebrow">Relay power</p>
+<pre>ESP32 5V / VIN  → Relay VCC
+ESP32 GND       → Relay GND</pre>
+          </article>
+          <article class="card soft">
+            <p class="eyebrow">Low-trigger logic</p>
+<pre>GPIO HIGH → relay OFF
+GPIO LOW  → relay ON</pre>
+            <p>Firmware must drive all relay pins HIGH (OFF) immediately on boot.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="mqtt" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">MQTT topics</p>
+            <h2>Private prefix, three topics.</h2>
+          </div>
+          <p>Avoid generic public-looking topics. Use a unique prefix so opportunistic listeners on the broker cannot guess the device.</p>
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <p class="eyebrow">Command</p>
+            <h3>home/hoa-door-7f3a/command</h3>
+            <p>Allowed payloads:</p>
+<pre>OPEN
+STOP
+CLOSE</pre>
+          </article>
+          <article class="card">
+            <p class="eyebrow">Device status</p>
+            <h3>home/hoa-door-7f3a/device/status</h3>
+            <p>Suggested payloads:</p>
+<pre>ONLINE
+OFFLINE
+MQTT_CONNECTED
+MQTT_DISCONNECTED</pre>
+          </article>
+          <article class="card">
+            <p class="eyebrow">Last command</p>
+            <h3>home/hoa-door-7f3a/device/last-command</h3>
+            <p>Suggested payloads:</p>
+<pre>OPEN_SENT
+STOP_SENT
+CLOSE_SENT</pre>
+          </article>
+        </div>
+
+        <div class="callout warning">
+          <p>Until a physical door sensor is installed, the app must say <strong>“Lệnh gần nhất”</strong> / <strong>“Last command”</strong> — never <strong>“Cửa đang mở/đóng”</strong>. The system knows what it sent, not what the door actually did.</p>
+        </div>
+      </section>
+
+      <section id="tasks" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Implementation tasks</p>
+            <h2>Twelve steps, in order.</h2>
+          </div>
+          <p>Tasks 0 through 11. The real door is connected only after the ESP32 and relay behavior are already proven on the bench.</p>
+        </div>
+
+        <div class="timeline">
+          <div class="timeline-item">
+            <div class="timeline-time">Task 0</div>
+            <div>
+              <h3>Prepare tools and safety checklist</h3>
+              <p>Gather ESP32, relay module, jumpers, USB charger, multimeter, terminal blocks, electrical box. Photograph the original wall-panel wiring before touching anything. Identify each button pair with continuity. Never assume wire color means function. Never connect to motor or 220V lines.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Task 1</div>
+            <div>
+              <h3>ESP32 local web app</h3>
+              <p>Arduino IDE + ESP32 board package. ESP32 hosts an Access Point at <code>http://192.168.4.1</code> with three buttons (MỞ / LÊN, DỪNG, ĐÓNG / XUỐNG) calling routes <code>/open</code>, <code>/stop</code>, <code>/close</code>. Each route pulses one GPIO for 500 ms.</p>
+              <p><strong>Test without relay:</strong> Serial Monitor logs the correct command for each button.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Task 2</div>
+            <div>
+              <h3>Relay bench test</h3>
+              <p>Wire ESP32 5V/GND to relay VCC/GND. GPIO16 → IN1, GPIO17 → IN2, GPIO18 → IN3. Press each web button and confirm exactly one relay clicks for ~500 ms. No two relays ON at the same time.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Task 3</div>
+            <div>
+              <h3>Identify wall-panel button terminals</h3>
+              <p>Power off the rolling-door system. Photograph existing wiring. Use multimeter continuity to find the two terminals that connect only when each button is pressed. Mark <code>OPEN_A/OPEN_B</code>, <code>STOP_A/STOP_B</code>, <code>CLOSE_A/CLOSE_B</code>. Do not remove existing wires unless absolutely necessary.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Task 4</div>
+            <div>
+              <h3>Connect relay dry contacts to wall panel</h3>
+              <p>Wire each relay's COM + NO in parallel with the matching button. Closing COM + NO is the same as a momentary press of the original button. Use COM + NO, never NC.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Task 5</div>
+            <div>
+              <h3>Local full-system test</h3>
+              <p>Confirm all relays OFF after boot. Verify physical wall buttons and RF remote still work. Then exercise OPEN, STOP, CLOSE from the local web page and confirm direction mapping. Pass condition: wall panel works, RF remote works, web buttons work, no wrong direction, no relay stuck ON.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Task 6</div>
+            <div>
+              <h3>Set up HiveMQ Cloud broker</h3>
+              <p>Create a free serverless cluster. Note broker host, port 8883 (ESP32 MQTTS), port 8884 (PWA WSS), username, password. Use a unique topic prefix such as <code>home/hoa-door-7f3a</code> — never <code>door/command</code>.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Task 7</div>
+            <div>
+              <h3>ESP32 firmware — Wi-Fi + MQTT</h3>
+              <p><code>WiFiClientSecure</code> + <code>PubSubClient</code> on port 8883. Subscribe to the command topic, publish <code>ONLINE</code> on connect, add reconnect logic, keep the local web page as fallback. Test with MQTTX publishing OPEN / STOP / CLOSE.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Task 8</div>
+            <div>
+              <h3>React PWA setup</h3>
+              <p>Vite React project with one screen: Mở cửa (green/blue), Dừng (yellow/orange, large and central), Đóng cửa (red). Show device Online/Offline, MQTT Connected/Disconnected, last command. Confirm OPEN and CLOSE before sending. Add a UI PIN gate before showing controls.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Task 9</div>
+            <div>
+              <h3>React PWA MQTT connection</h3>
+              <p>Install <code>mqtt</code>. Connect WSS on port 8884. Publish to <code>home/hoa-door-7f3a/command</code>. Subscribe to status and last-command. Show connection state and last command in the UI.</p>
+              <p><strong>Limit:</strong> direct PWA → MQTT exposes credentials in the bundle. Acceptable for early testing only.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Task 10</div>
+            <div>
+              <h3>Deploy PWA to Vercel</h3>
+              <p>Push to GitHub, connect to Vercel, configure env vars, deploy. Open the URL on family phones, Add to Home Screen. Test commands while on mobile data.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Task 11</div>
+            <div>
+              <h3>Final hardware installation</h3>
+              <p>Mount ESP32 + relay in a plastic electrical box. Use terminal blocks / Wago / domino — no loose Dupont wires for permanent joins. Power from a USB 5V 2A charger. Confirm reconnect after power loss and that all relays are OFF after reboot. Close the box only after full testing.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="hardware" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Hardware status</p>
+            <h2>What's on hand, what's pending.</h2>
+          </div>
+          <p>Snapshot of the bill of materials. <span class="badge success">Have</span> is ready, <span class="badge medium">Shipping</span> is en route, <span class="badge high">Need</span> is still to source.</p>
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <span class="badge success">Have</span>
+            <h3>ESP32 DevKit</h3>
+            <p>Primary controller.</p>
+          </article>
+          <article class="card">
+            <span class="badge success">Have</span>
+            <h3>Jumper wires F-to-F</h3>
+            <p>For ESP32 → relay during bench test.</p>
+          </article>
+          <article class="card">
+            <span class="badge medium">Shipping</span>
+            <h3>4-channel 5V relay module</h3>
+            <p>Opto-isolated, low-trigger.</p>
+          </article>
+          <article class="card">
+            <span class="badge high">Need</span>
+            <h3>USB charger 5V 2A + cable</h3>
+            <p>Permanent power for ESP32.</p>
+          </article>
+          <article class="card">
+            <span class="badge high">Need</span>
+            <h3>Electrical wire 0.5–0.75 mm²</h3>
+            <p>Short runs, relay → wall panel.</p>
+          </article>
+          <article class="card">
+            <span class="badge high">Need</span>
+            <h3>Multimeter (continuity mode)</h3>
+            <p>Identify wall-panel button pairs.</p>
+          </article>
+          <article class="card">
+            <span class="badge high">Need</span>
+            <h3>Domino / Wago / terminal blocks</h3>
+            <p>Permanent wire joins, no loose Dupont.</p>
+          </article>
+          <article class="card">
+            <span class="badge high">Need</span>
+            <h3>Plastic electrical box</h3>
+            <p>Enclosure for ESP32 + relay.</p>
+          </article>
+          <article class="card">
+            <span class="badge high">Need</span>
+            <h3>Electrical tape / heat shrink</h3>
+            <p>Insulate joins.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="testing" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Testing matrix</p>
+            <h2>Pass conditions.</h2>
+          </div>
+          <p>The system passes only when every row holds true. Latency targets below are guidance, not pass/fail.</p>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr><th>Test</th><th>Expected result</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>ESP32 boot</td><td>All relays OFF</td></tr>
+            <tr><td>Local web OPEN</td><td>Relay 1 clicks once</td></tr>
+            <tr><td>Local web STOP</td><td>Relay 2 clicks once</td></tr>
+            <tr><td>Local web CLOSE</td><td>Relay 3 clicks once</td></tr>
+            <tr><td>MQTT OPEN</td><td>Relay 1 clicks once</td></tr>
+            <tr><td>MQTT STOP</td><td>Relay 2 clicks once</td></tr>
+            <tr><td>MQTT CLOSE</td><td>Relay 3 clicks once</td></tr>
+            <tr><td>Physical OPEN button</td><td>Door opens normally</td></tr>
+            <tr><td>Physical STOP button</td><td>Door stops normally</td></tr>
+            <tr><td>Physical CLOSE button</td><td>Door closes normally</td></tr>
+            <tr><td>RF remote</td><td>Still works normally</td></tr>
+            <tr><td>Internet down</td><td>Physical controls still work</td></tr>
+            <tr><td>ESP32 power loss</td><td>Physical controls still work</td></tr>
+            <tr><td>ESP32 reboot</td><td>No relay accidentally turns ON</td></tr>
+          </tbody>
+        </table>
+
+        <div class="spec-grid">
+          <div class="spec-cell">
+            <span class="spec-value">~50–200 ms</span>
+            <span class="spec-label">Local ESP32 web latency</span>
+          </div>
+          <div class="spec-cell">
+            <span class="spec-value">~100–500 ms</span>
+            <span class="spec-label">PWA via HiveMQ Cloud</span>
+          </div>
+          <div class="spec-cell">
+            <span class="spec-value">500 ms</span>
+            <span class="spec-label">Default relay pulse</span>
+          </div>
+          <div class="spec-cell">
+            <span class="spec-value">3 + 1</span>
+            <span class="spec-label">Active relays in v1, plus spare</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="future" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Future improvements</p>
+            <h2>After the family is happy.</h2>
+          </div>
+          <p>Out of scope for v1. Listed in rough priority order.</p>
+        </div>
+
+        <ul class="action-list">
+          <li>Magnetic reed switch on the door rail to detect real open/closed state.</li>
+          <li>Activity log of every command received and pulse fired.</li>
+          <li>Per-user authentication so each family member has their own credentials.</li>
+          <li>Backend API so MQTT credentials are no longer exposed in the frontend bundle.</li>
+          <li>Push notification when the door is left open beyond a timeout.</li>
+          <li>Auto-close timer with a safety confirmation step.</li>
+          <li>Physical emergency-stop input wired to the ESP32.</li>
+          <li>Watchdog timer and fail-safe reboot handling.</li>
+        </ul>
+      </section>
+
+      <footer class="footer">
+        <p class="eyebrow">Plan · revised alpha</p>
+        <p>Source of truth: <code>esp_32_rolling_door_pwa_plan_revised.md</code>. Open this artifact directly in a browser; it links <code>./styles.css</code> and follows local <code>DESIGN.md</code>.</p>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "door-control-pwa",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "PWA for controlling the rolling door over MQTT/HiveMQ",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "mqtt": "5.10.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.16.0",
+    "@vitejs/plugin-react": "4.3.4",
+    "eslint": "9.16.0",
+    "eslint-plugin-react": "7.37.2",
+    "eslint-plugin-react-hooks": "5.1.0",
+    "globals": "15.13.0",
+    "vite": "5.4.11",
+    "vite-plugin-pwa": "0.21.1"
+  }
+}

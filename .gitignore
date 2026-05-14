@@ -1,0 +1,33 @@
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Dependencies
+node_modules/
+
+# Build
+dist/
+out/
+
+# Firmware secrets — never commit credentials
+firmware/door_controller/secrets.h
+
+# PWA local env files
+pwa/.env
+pwa/.env.local
+pwa/.env.*.local
+
+# Arduino build artefacts (sometimes dropped next to the .ino)
+firmware/**/build/
+firmware/**/*.bin
+firmware/**/*.elf
+
+# Logs
+*.log
