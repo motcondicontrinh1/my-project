@@ -1,0 +1,5 @@
+interface:
+  display_name: "HTML Review Artifacts"
+  short_description: "Token-saving HTML review outputs"
+  default_prompt: "Use $html-review-artifacts to create a browser-openable HTML review artifact that links ./styles.css and follows local DESIGN.md guidance."
+  brand_color: "#0066B1"
