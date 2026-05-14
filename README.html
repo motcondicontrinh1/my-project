@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HTML Agent Output Guide</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="report-shell">
+      <nav class="top-nav" aria-label="Guide sections">
+        <div class="brand-mark">
+          <span class="m-stripe" aria-hidden="true"><span></span><span></span><span></span></span>
+          HTML Agent Output
+        </div>
+        <div class="nav-links">
+          <a href="#why-html">Why HTML</a>
+          <a href="#token-budget">Token Budget</a>
+          <a href="#workflow">Workflow</a>
+          <a href="#prompts">Prompts</a>
+        </div>
+      </nav>
+
+      <header class="hero-photo-band">
+        <div class="hero-content">
+          <p class="eyebrow">Human review artifacts</p>
+          <h1>Use HTML when the shape matters.</h1>
+          <p class="lead">
+            Markdown remains the working format for agent memory, specs, and durable notes.
+            HTML is the review surface when a human needs layout, comparison, annotation,
+            motion, or visual hierarchy instead of another wall of text.
+          </p>
+          <div class="button-row">
+            <a class="button" href="https://thariqs.github.io/html-effectiveness/">Read the article</a>
+            <a class="button secondary" href="./DESIGN.md">Open DESIGN.md</a>
+          </div>
+        </div>
+      </header>
+
+      <section id="why-html" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Decision rule</p>
+            <h2>Markdown for state. HTML for review.</h2>
+          </div>
+          <p>
+            Thariq Shihipar's HTML examples show agents producing planning boards,
+            annotated PR reviews, design-system sheets, prototypes, diagrams, decks,
+            explainers, reports, and custom editors as browser-openable HTML files.
+          </p>
+        </div>
+
+        <div class="comparison-grid">
+          <div>
+            <h3>Use Markdown when</h3>
+            <ul class="action-list">
+              <li>The file is agent-readable memory, a spec, a task list, or a changelog.</li>
+              <li>The content should stay easy to diff, edit, and paste into prompts.</li>
+              <li>The output will be consumed by another agent or automation.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Use HTML when</h3>
+            <ul class="action-list">
+              <li>The output is for a human reviewing complex information.</li>
+              <li>Spatial layout, color, severity, side-by-side comparison, or interaction helps.</li>
+              <li>The artifact should open directly in a browser without a dev server.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="token-budget" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Token budget</p>
+            <h2>Externalize decorative CSS.</h2>
+          </div>
+          <p>
+            The expensive part of attractive HTML is repeated styling. Future artifacts
+            should link this shared stylesheet, then spend tokens on semantic content.
+          </p>
+        </div>
+
+        <div class="spec-grid">
+          <div class="spec-cell">
+            <span class="spec-value">01</span>
+            <span class="spec-label label-uppercase">Link CSS</span>
+            <p>Use <code>&lt;link rel="stylesheet" href="./styles.css"&gt;</code>.</p>
+          </div>
+          <div class="spec-cell">
+            <span class="spec-value">02</span>
+            <span class="spec-label label-uppercase">No inline theme</span>
+            <p>Avoid large <code>&lt;style&gt;</code> blocks and repeated visual tokens.</p>
+          </div>
+          <div class="spec-cell">
+            <span class="spec-value">03</span>
+            <span class="spec-label label-uppercase">Semantic shell</span>
+            <p>Use shallow sections, cards, grids, badges, diffs, and timelines.</p>
+          </div>
+          <div class="spec-cell">
+            <span class="spec-value">04</span>
+            <span class="spec-label label-uppercase">Open locally</span>
+            <p>Keep artifacts static and browser-openable without a build step.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="workflow" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Project workflow</p>
+            <h2>Fetch design once. Reuse the sheet.</h2>
+          </div>
+          <p>
+            This project uses the BMW M template from <code>getdesign</code> as the visual
+            source, then converts the durable design choices into static CSS classes.
+          </p>
+        </div>
+
+        <div class="timeline">
+          <div class="timeline-item">
+            <div class="timeline-time">Setup</div>
+            <div>
+              <h3>Install the design reference</h3>
+              <pre><code>npx getdesign@latest add bmw-m --out ./DESIGN.md</code></pre>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Style</div>
+            <div>
+              <h3>Generate or maintain shared CSS</h3>
+              <p>
+                Keep common visual decisions in <code>styles.css</code>: black canvas,
+                M tricolor stripe, sharp cards, badges, comparison grids, code blocks,
+                review diffs, and timelines.
+              </p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-time">Output</div>
+            <div>
+              <h3>Create semantic HTML artifacts</h3>
+              <p>
+                Future agents should create small HTML files that link the shared CSS,
+                use existing classes, and put effort into structure and review utility.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Reusable components</p>
+            <h2>Review patterns are already styled.</h2>
+          </div>
+          <p>
+            Agents should prefer these shared classes before inventing new chrome.
+            The design language is sharp, dark, high-contrast, and sparse.
+          </p>
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <div class="badge-row">
+              <span class="badge high">High</span>
+              <span class="badge medium">Medium</span>
+              <span class="badge low">Low</span>
+            </div>
+            <h3>Severity badges</h3>
+            <p>Use for findings, risks, acceptance status, and review triage.</p>
+          </article>
+          <article class="card soft">
+            <h3>Callout panels</h3>
+            <div class="callout warning">
+              Link CSS externally before adding decorative layout.
+            </div>
+          </article>
+          <article class="card">
+            <h3>Action lists</h3>
+            <ul class="action-list">
+              <li>Keep items short.</li>
+              <li>Make completion state obvious.</li>
+              <li>Group by decision, not file noise.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Annotated diff example</p>
+            <h2>Spatial review beats flat prose.</h2>
+          </div>
+          <p>
+            A browser artifact can place code, severity, and reviewer context in the same scan path.
+          </p>
+        </div>
+
+        <div class="diff" role="table" aria-label="Example annotated diff">
+          <div class="diff-row diff-remove" role="row">
+            <div class="diff-sign">-</div>
+            <div class="diff-code">&lt;style&gt;/* repeated theme */&lt;/style&gt;</div>
+            <div class="diff-note">Large inline styles inflate every artifact.</div>
+          </div>
+          <div class="diff-row diff-add" role="row">
+            <div class="diff-sign">+</div>
+            <div class="diff-code">&lt;link rel="stylesheet" href="./styles.css"&gt;</div>
+            <div class="diff-note">Shared CSS keeps future HTML lean.</div>
+          </div>
+          <div class="diff-row diff-add" role="row">
+            <div class="diff-sign">+</div>
+            <div class="diff-code">&lt;section class="section"&gt;...&lt;/section&gt;</div>
+            <div class="diff-note">Semantic structure stays readable.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="prompts" class="section">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Prompt templates</p>
+            <h2>Use these with future agents.</h2>
+          </div>
+          <p>
+            These prompts preserve the split: Markdown for source material and plans,
+            HTML for human-facing synthesis and review.
+          </p>
+        </div>
+
+        <div class="grid two">
+          <article class="card copy-block">
+            <h3>Review artifact</h3>
+            <pre><code>Create a standalone HTML review artifact for this work.
+Link ./styles.css in the head.
+Do not inline decorative CSS.
+Use semantic sections, shallow markup, badges, cards, diffs, and timelines where useful.
+Optimize for a human reviewer scanning risk, decisions, and next actions.</code></pre>
+          </article>
+          <article class="card copy-block">
+            <h3>Research explainer</h3>
+            <pre><code>Turn this research into a browser-openable HTML explainer.
+Use ./styles.css and existing classes.
+Include a concise summary, comparison grid, timeline if relevant, and action checklist.
+Keep generated HTML semantic and avoid custom styling unless a missing reusable class is necessary.</code></pre>
+          </article>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <span class="m-stripe" aria-hidden="true"><span></span><span></span><span></span></span>
+        <p>
+          Built as a reusable local pattern for agent-generated HTML artifacts.
+          Source design: <code>DESIGN.md</code>. Shared styling: <code>styles.css</code>.
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>
