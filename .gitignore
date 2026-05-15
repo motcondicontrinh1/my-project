@@ -11,6 +11,7 @@ Desktop.ini
 
 # Dependencies
 node_modules/
+worker/node_modules/
 
 # Build
 dist/

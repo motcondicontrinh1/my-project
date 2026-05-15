@@ -19,6 +19,9 @@
 #define MQTT_USERNAME "your-mqtt-user"
 #define MQTT_PASSWORD "your-mqtt-password"
 
-// ---- Topic prefix (must match the PWA's VITE_TOPIC_PREFIX) ------------------
-// Use a hard-to-guess prefix. Do NOT use "door/command" or similar.
-#define TOPIC_PREFIX  "home/hoa-door-7f3a"
+// ---- Topic prefix -----------------------------------------------------------
+// Use a hard-to-guess random prefix. Do NOT commit the real value to GitHub.
+// Must match TOPIC_PREFIX in worker/wrangler.toml AND pwa/.env.local.
+// The PWA no longer publishes directly to MQTT — it POSTs to the Cloudflare
+// Worker which holds the broker credentials server-side.
+#define TOPIC_PREFIX  "h/b7e3f1a29c4d8e05"

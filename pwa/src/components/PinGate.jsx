@@ -10,7 +10,7 @@ export default function PinGate({ expectedPin, onUnlock }) {
   function submit(e) {
     e.preventDefault();
     if (pin === expectedPin) {
-      onUnlock();
+      onUnlock(pin);
     } else {
       setError(true);
       setPin('');

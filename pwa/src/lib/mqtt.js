@@ -1,5 +1,4 @@
-// MQTT client for the rolling-door PWA — Task 9 of the plan, plus the
-// developer-only telemetry topics from the Power-Loss Troubleshooting plan.
+// MQTT client for the rolling-door PWA — subscribe-only.
 //
 // Always subscribed:
 //   <prefix>/device/status        (ONLINE / OFFLINE)
@@ -10,22 +9,16 @@
 //   <prefix>/device/heartbeat     (JSON: uptime, rssi, heap, millis)
 //   <prefix>/device/diagnostics   (JSON: reason, ip, fw, uptime)  — retained
 //
-// Publishes to <prefix>/command : OPEN | STOP | CLOSE.
-//
-// Security caveat (per plan, Task 9): MQTT credentials are present in the
-// frontend bundle. Acceptable for early testing only.
+// Commands are sent via the Cloudflare Worker proxy (see workerClient.js).
 
 import mqtt from 'mqtt';
 import { logger } from './logger.js';
-
-const VALID_COMMANDS = new Set(['OPEN', 'STOP', 'CLOSE']);
 
 export function createDoorClient({ url, username, password, topicPrefix, includeDevTopics = false }) {
   if (!url || !topicPrefix) {
     throw new Error('createDoorClient: url and topicPrefix are required');
   }
 
-  const TOPIC_COMMAND      = `${topicPrefix}/command`;
   const TOPIC_STATUS       = `${topicPrefix}/device/status`;
   const TOPIC_LAST_COMMAND = `${topicPrefix}/device/last-command`;
   const TOPIC_HEARTBEAT    = `${topicPrefix}/device/heartbeat`;
@@ -91,25 +84,6 @@ export function createDoorClient({ url, username, password, topicPrefix, include
   });
 
   return {
-    sendCommand(cmd) {
-      if (!VALID_COMMANDS.has(cmd)) {
-        const err = new Error(`Invalid command: ${cmd}`);
-        logger.error('cmd', err.message);
-        return Promise.reject(err);
-      }
-      logger.info('cmd', `→ ${cmd}`);
-      return new Promise((resolve, reject) => {
-        client.publish(TOPIC_COMMAND, cmd, { qos: 1, retain: false }, (err) => {
-          if (err) {
-            logger.error('cmd', `publish ${cmd} failed`, err);
-            reject(err);
-          } else {
-            logger.debug('cmd', `${cmd} published`);
-            resolve();
-          }
-        });
-      });
-    },
     on(event, cb) {
       if (!listeners[event]) throw new Error(`Unknown event: ${event}`);
       listeners[event].add(cb);

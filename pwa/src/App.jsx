@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createDoorClient } from './lib/mqtt.js';
+import { sendCommand }      from './lib/workerClient.js';
 import { useUrlFlags }      from './lib/useUrlFlags.js';
 import { logger, setVerbose } from './lib/logger.js';
 import {
@@ -14,6 +15,7 @@ import ConfirmDialog    from './components/ConfirmDialog.jsx';
 import TroubleshootPanel from './components/TroubleshootPanel.jsx';
 
 const ENV = {
+  workerUrl:   import.meta.env.VITE_WORKER_URL,
   url:         import.meta.env.VITE_MQTT_URL,
   username:    import.meta.env.VITE_MQTT_USERNAME,
   password:    import.meta.env.VITE_MQTT_PASSWORD,
@@ -29,6 +31,7 @@ const CONFIRM_COPY = {
 export default function App() {
   const flags = useUrlFlags();
   const [unlocked, setUnlocked] = useState(false);
+  const [pin, setPin] = useState(null);
 
   // Enable console mirroring of every log entry as soon as we know dev mode.
   useEffect(() => {
@@ -37,15 +40,16 @@ export default function App() {
   }, [flags.dev, flags]);
 
   if (!unlocked) {
-    return <PinGate expectedPin={ENV.pin} onUnlock={() => {
+    return <PinGate expectedPin={ENV.pin} onUnlock={(p) => {
       logger.info('ui', 'PIN gate unlocked');
+      setPin(p);
       setUnlocked(true);
     }} />;
   }
-  return <DoorApp flags={flags} />;
+  return <DoorApp flags={flags} pin={pin} />;
 }
 
-function DoorApp({ flags }) {
+function DoorApp({ flags, pin }) {
   const [mqttConnected,    setMqttConnected]    = useState(false);
   const [deviceStatus,     setDeviceStatus]     = useState(null);
   const [lastCommandAck,   setLastCommandAck]   = useState(null);
@@ -59,7 +63,7 @@ function DoorApp({ flags }) {
   const clientRef = useRef(null);
 
   const configValid = useMemo(
-    () => Boolean(ENV.url && ENV.topicPrefix),
+    () => Boolean(ENV.workerUrl && ENV.url && ENV.topicPrefix),
     []
   );
 
@@ -127,16 +131,13 @@ function DoorApp({ flags }) {
   }
 
   async function send(cmd) {
-    const client = clientRef.current;
-    if (!client) {
-      logger.error('cmd', `cannot send ${cmd}: no client`);
-      return;
-    }
     setBusy(true);
     const sentAt = Date.now();
     setLastCommandSentAt(sentAt);
     try {
-      await client.sendCommand(cmd);
+      logger.info('cmd', '→ Worker ' + cmd);
+      await sendCommand(cmd, pin, ENV.workerUrl);
+      logger.debug('cmd', cmd + ' worker ok');
     } catch (e) {
       const msg = `Gửi lệnh thất bại: ${e.message}`;
       logger.error('cmd', msg, e);
@@ -171,7 +172,7 @@ function DoorApp({ flags }) {
           <h1>Cửa Cuốn</h1>
         </div>
         <p className="error-banner">
-          Thiếu cấu hình MQTT. Sao chép <code>.env.example</code> sang <code>.env.local</code> và điền giá trị.
+          Thiếu cấu hình. Kiểm tra VITE_WORKER_URL và VITE_MQTT_URL trong .env.local
         </p>
       </main>
     );
