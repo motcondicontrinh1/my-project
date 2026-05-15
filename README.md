@@ -66,3 +66,4 @@ See `firmware/README.md` and `pwa/README.md` for setup and run instructions.
 ## License
 
 Private bundle — not published.
+
