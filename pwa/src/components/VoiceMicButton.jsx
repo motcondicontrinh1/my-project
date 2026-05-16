@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Mic, MicOff, Check, X } from 'lucide-react';
 import { isSupported, createRecognizer } from '../lib/voiceRecognition.js';
 import { matchCommand } from '../lib/commandMatcher.js';
 import { logger } from '../lib/logger.js';
@@ -96,6 +97,7 @@ export default function VoiceMicButton({ onCommand, disabled }) {
   if (mode === 'unsupported') {
     return (
       <div className="voice-unsupported">
+        <MicOff size={48} strokeWidth={1} style={{ opacity: 0.3 }} />
         <p>Trình duyệt không hỗ trợ nhận diện giọng nói.</p>
         <p>Hãy mở app trên <strong>Chrome (Android)</strong> hoặc <strong>Safari (iOS)</strong>.</p>
       </div>
@@ -105,6 +107,7 @@ export default function VoiceMicButton({ onCommand, disabled }) {
   if (mode === 'denied') {
     return (
       <div className="voice-unsupported">
+        <MicOff size={48} strokeWidth={1} style={{ opacity: 0.3 }} />
         <p>Cần quyền truy cập microphone.</p>
         <p>Vào cài đặt trình duyệt để cấp quyền, sau đó tải lại trang.</p>
       </div>
@@ -129,8 +132,9 @@ export default function VoiceMicButton({ onCommand, disabled }) {
         onClick={handleTap}
       >
         <span className="voice-mic-icon" aria-hidden="true">
-          {mode === 'matched'   ? '✓' :
-           mode === 'unmatched' ? '✕' : '🎤'}
+          {mode === 'matched'   ? <Check size={56} strokeWidth={1.5} /> :
+           mode === 'unmatched' ? <X     size={56} strokeWidth={1.5} /> :
+                                  <Mic   size={56} strokeWidth={1.5} />}
         </span>
       </button>
 
