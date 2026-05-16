@@ -1,5 +1,11 @@
 // Cloudflare Worker — PIN-authenticated MQTT command proxy.
-// Zero runtime dependencies. Minimal MQTT 3.1.1 binary framing over WebSocket.
+// Two endpoints:
+//   POST /        body {pin, cmd}        — direct command (PWA + simple Siri shortcuts)
+//   POST /voice   body {pin, transcript} — natural-language voice routing
+//                                          regex fast path → Groq LLM fallback
+//
+// Required secrets: MQTT_URL, MQTT_USERNAME, MQTT_PASSWORD, UI_PIN
+// Optional secrets: GROQ_API_KEY (enables LLM fallback on /voice)
 
 const VALID_CMDS = new Set(['OPEN', 'STOP', 'CLOSE']);
 const rateMap = new Map(); // IP → {count, resetAt}
@@ -17,7 +23,6 @@ function timingSafeEqual(a, b) {
   const ab = enc.encode(a);
   const bb = enc.encode(b);
   if (ab.length !== bb.length) {
-    // Always iterate to prevent length-based timing leak
     let d = 1;
     for (let i = 0; i < ab.length; i++) d |= ab[i] ^ ab[i];
     return false;
@@ -38,7 +43,70 @@ function checkRate(ip) {
   return entry.count <= 10;
 }
 
-// --- MQTT 3.1.1 minimal framing ---
+// --- Voice command matching ----------------------------------------------
+
+function stripDiacritics(s) {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D');
+}
+
+const PATTERNS = {
+  STOP:  /\b(dung|stop)\b/i,
+  OPEN:  /\b(mo|len)\b/i,
+  CLOSE: /\b(dong|xuong)\b/i,
+};
+
+function matchByRegex(transcript) {
+  if (!transcript) return null;
+  const normalized = stripDiacritics(transcript.trim().toLowerCase());
+  for (const [cmd, pattern] of Object.entries(PATTERNS)) {
+    if (pattern.test(normalized)) return cmd;
+  }
+  return null;
+}
+
+const GROQ_SYSTEM_PROMPT =
+  'Bạn là bộ phân loại lệnh điều khiển cửa cuốn. ' +
+  'Người dùng nói tiếng Việt tự nhiên. Phân loại ý định thành đúng 1 trong 4 giá trị:\n' +
+  '- OPEN: muốn mở cửa / kéo cửa lên / nâng cửa\n' +
+  '- CLOSE: muốn đóng cửa / hạ cửa xuống\n' +
+  '- STOP: muốn dừng cửa / ngừng chuyển động\n' +
+  '- UNKNOWN: không liên quan đến cửa cuốn hoặc không rõ ý định\n' +
+  'Trả lời CHÍNH XÁC JSON dạng {"intent":"<value>"} — không giải thích, không thêm gì.';
+
+async function classifyByGroq(transcript, env) {
+  if (!env.GROQ_API_KEY) return null;
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.GROQ_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'llama-3.1-8b-instant',
+      messages: [
+        { role: 'system', content: GROQ_SYSTEM_PROMPT },
+        { role: 'user',   content: transcript },
+      ],
+      max_tokens: 30,
+      temperature: 0,
+      response_format: { type: 'json_object' },
+    }),
+  });
+  if (!res.ok) throw new Error(`Groq HTTP ${res.status}`);
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) return null;
+  let parsed;
+  try { parsed = JSON.parse(content); } catch { return null; }
+  const intent = parsed.intent;
+  return VALID_CMDS.has(intent) ? intent : null;
+}
+
+// --- MQTT 3.1.1 minimal framing ------------------------------------------
 
 function encodeUTF8(str) {
   const bytes = new TextEncoder().encode(str);
@@ -61,10 +129,10 @@ function encodeRemainingLength(len) {
 }
 
 function buildConnect(clientId, username, password) {
-  const proto = new Uint8Array([0x00, 0x04, 0x4d, 0x51, 0x54, 0x54]); // "MQTT"
-  const level = new Uint8Array([0x04]); // 3.1.1
-  const flags = new Uint8Array([0xc2]); // username+password+clean
-  const keep = new Uint8Array([0x00, 0x3c]); // 60s
+  const proto = new Uint8Array([0x00, 0x04, 0x4d, 0x51, 0x54, 0x54]);
+  const level = new Uint8Array([0x04]);
+  const flags = new Uint8Array([0xc2]);
+  const keep = new Uint8Array([0x00, 0x3c]);
   const cid = encodeUTF8(clientId);
   const usr = encodeUTF8(username);
   const pwd = encodeUTF8(password);
@@ -88,7 +156,7 @@ function buildPublish(topic, message) {
   const payloadLen = topicBytes.length + msgBytes.length;
   const rl = encodeRemainingLength(payloadLen);
   const pkt = new Uint8Array(1 + rl.length + payloadLen);
-  pkt[0] = 0x30; // QoS 0, no retain
+  pkt[0] = 0x30;
   pkt.set(rl, 1);
   pkt.set(topicBytes, 1 + rl.length);
   pkt.set(msgBytes, 1 + rl.length + topicBytes.length);
@@ -98,17 +166,13 @@ function buildPublish(topic, message) {
 async function mqttPublish(env, topic, message) {
   const ws = new WebSocket(env.MQTT_URL, 'mqtt');
   const clientId = `cf-${Date.now().toString(36)}`;
-
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => { ws.close(); reject(new Error('timeout')); }, 5000);
-
     ws.addEventListener('open', () => {
       ws.send(buildConnect(clientId, env.MQTT_USERNAME, env.MQTT_PASSWORD));
     });
-
     ws.addEventListener('message', async (ev) => {
       const data = ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : new Uint8Array(await ev.data.arrayBuffer());
-      // CONNACK: 0x20 0x02 XX RC
       if (data[0] === 0x20 && data.length >= 4) {
         if (data[3] !== 0x00) {
           clearTimeout(timeout);
@@ -122,18 +186,72 @@ async function mqttPublish(env, topic, message) {
         resolve();
       }
     });
-
     ws.addEventListener('error', (e) => { clearTimeout(timeout); reject(e); });
     ws.addEventListener('close', () => { clearTimeout(timeout); });
   });
 }
 
+// --- Request handlers ----------------------------------------------------
+
+async function handleDirect(body, env) {
+  const { pin, cmd } = body;
+  if (!pin || !cmd || !VALID_CMDS.has(cmd)) {
+    return { status: 400, text: 'Bad request: need {pin, cmd}' };
+  }
+  if (!timingSafeEqual(pin, env.UI_PIN)) {
+    return { status: 401, text: 'Unauthorized' };
+  }
+  try {
+    await mqttPublish(env, `${env.TOPIC_PREFIX}/command`, cmd);
+  } catch (e) {
+    return { status: 500, text: `Broker error: ${e.message}` };
+  }
+  return { status: 200, text: 'OK' };
+}
+
+async function handleVoice(body, env) {
+  const { pin, transcript } = body;
+  if (!pin || typeof transcript !== 'string' || !transcript.trim()) {
+    return { status: 400, text: 'Bad request: need {pin, transcript}' };
+  }
+  if (!timingSafeEqual(pin, env.UI_PIN)) {
+    return { status: 401, text: 'Unauthorized' };
+  }
+
+  // Fast path: regex
+  let cmd = matchByRegex(transcript);
+  let route = 'regex';
+
+  // Fallback: Groq LLM
+  if (!cmd) {
+    try {
+      cmd = await classifyByGroq(transcript, env);
+      route = 'llm';
+    } catch (e) {
+      return { status: 502, text: `LLM error: ${e.message}` };
+    }
+  }
+
+  if (!cmd) {
+    return { status: 422, text: `Không hiểu: "${transcript}"` };
+  }
+
+  try {
+    await mqttPublish(env, `${env.TOPIC_PREFIX}/command`, cmd);
+  } catch (e) {
+    return { status: 500, text: `Broker error: ${e.message}` };
+  }
+
+  return { status: 200, text: cmd, route };
+}
+
+// --- Entry point ---------------------------------------------------------
+
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: cors(env) });
     }
-
     if (request.method !== 'POST') {
       return new Response('Method not allowed', { status: 405, headers: cors(env) });
     }
@@ -148,22 +266,13 @@ export default {
       return new Response('Invalid JSON', { status: 400, headers: cors(env) });
     }
 
-    const { pin, cmd } = body;
-    if (!pin || !cmd || !VALID_CMDS.has(cmd)) {
-      return new Response('Bad request: need {pin, cmd}', { status: 400, headers: cors(env) });
-    }
+    const url = new URL(request.url);
+    const result = url.pathname === '/voice'
+      ? await handleVoice(body, env)
+      : await handleDirect(body, env);
 
-    if (!timingSafeEqual(pin, env.UI_PIN)) {
-      return new Response('Unauthorized', { status: 401, headers: cors(env) });
-    }
-
-    const topic = `${env.TOPIC_PREFIX}/command`;
-    try {
-      await mqttPublish(env, topic, cmd);
-    } catch (e) {
-      return new Response(`Broker error: ${e.message}`, { status: 500, headers: cors(env) });
-    }
-
-    return new Response('OK', { status: 200, headers: cors(env) });
+    const headers = { ...cors(env) };
+    if (result.route) headers['X-Route'] = result.route;
+    return new Response(result.text, { status: result.status, headers });
   },
 };

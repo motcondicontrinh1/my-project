@@ -8,5 +8,6 @@ mode = "smart"
 [vars]
 # Non-secret config. Secrets are set via: wrangler secret put <NAME>
 # Required secrets: MQTT_URL, MQTT_USERNAME, MQTT_PASSWORD, UI_PIN
+# Optional secrets: GROQ_API_KEY (enables LLM fallback on POST /voice)
 TOPIC_PREFIX = "h/b7e3f1a29c4d8e05"
 ALLOWED_ORIGIN = "https://my-project-lrkb.vercel.app"
