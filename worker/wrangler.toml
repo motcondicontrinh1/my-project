@@ -15,3 +15,8 @@ invocation_logs = true
 # Optional secrets: GROQ_API_KEY (enables LLM fallback on POST /voice)
 TOPIC_PREFIX = "h/b7e3f1a29c4d8e05"
 ALLOWED_ORIGIN = "https://my-project-lrkb.vercel.app"
+
+# KV namespace for persisting PIN-failure counts and 24h IP bans
+[[kv_namespaces]]
+binding = "BANS"
+id = "c0132456d3264505820811be553a048f"

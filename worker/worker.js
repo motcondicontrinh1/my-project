@@ -6,6 +6,11 @@
 //
 // Required secrets: MQTT_URL, MQTT_USERNAME, MQTT_PASSWORD, UI_PIN
 // Optional secrets: GROQ_API_KEY (enables LLM fallback on /voice)
+// Required KV bindings: BANS (persists PIN-failure counts and 24h IP bans)
+//
+// Security:
+//   - Rate limit: 10 requests/minute/IP (in-memory, per-isolate)
+//   - Ban: 10 wrong PINs → 24h ban (KV-persisted across isolates)
 
 const VALID_CMDS = new Set(['OPEN', 'STOP', 'CLOSE']);
 const rateMap = new Map(); // IP → {count, resetAt}
@@ -41,6 +46,47 @@ function checkRate(ip) {
   entry.count++;
   rateMap.set(ip, entry);
   return entry.count <= 10;
+}
+
+// --- IP ban (10 wrong PINs → 24h ban, persisted in KV) ------------------
+
+const BAN_THRESHOLD = 10;
+const BAN_DURATION_MS = 24 * 60 * 60 * 1000;
+const KV_TTL_S = 24 * 60 * 60;
+
+async function checkBan(ip, env) {
+  if (!env.BANS) return null;
+  try {
+    const raw = await env.BANS.get(`ip:${ip}`);
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    if (entry.bannedUntil && entry.bannedUntil > Date.now()) {
+      return entry.bannedUntil;
+    }
+    return null;
+  } catch {
+    return null; // fail open — don't lock user out on KV outage
+  }
+}
+
+async function recordPinFailure(ip, env) {
+  if (!env.BANS) return;
+  try {
+    const raw = await env.BANS.get(`ip:${ip}`);
+    const entry = raw ? JSON.parse(raw) : { fails: 0 };
+    entry.fails = (entry.fails || 0) + 1;
+    if (entry.fails >= BAN_THRESHOLD) {
+      entry.bannedUntil = Date.now() + BAN_DURATION_MS;
+    }
+    await env.BANS.put(`ip:${ip}`, JSON.stringify(entry), { expirationTtl: KV_TTL_S });
+  } catch {
+    /* ignore — best effort */
+  }
+}
+
+async function clearPinFailures(ip, env) {
+  if (!env.BANS) return;
+  try { await env.BANS.delete(`ip:${ip}`); } catch { /* ignore */ }
 }
 
 // --- Voice command matching ----------------------------------------------
@@ -248,7 +294,7 @@ async function handleVoice(body, env) {
 // --- Entry point ---------------------------------------------------------
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: cors(env) });
     }
@@ -257,6 +303,14 @@ export default {
     }
 
     const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+
+    // IP ban check (24h after 10 wrong PINs)
+    const bannedUntil = await checkBan(ip, env);
+    if (bannedUntil) {
+      const remainHours = Math.ceil((bannedUntil - Date.now()) / 3600000);
+      return new Response(`IP banned (${remainHours}h remaining)`, { status: 403, headers: cors(env) });
+    }
+
     if (!checkRate(ip)) {
       return new Response('Rate limit exceeded', { status: 429, headers: cors(env) });
     }
@@ -270,6 +324,13 @@ export default {
     const result = url.pathname === '/voice'
       ? await handleVoice(body, env)
       : await handleDirect(body, env);
+
+    // Track PIN failures for ban
+    if (result.status === 401) {
+      ctx.waitUntil(recordPinFailure(ip, env));
+    } else if (result.status === 200) {
+      ctx.waitUntil(clearPinFailures(ip, env));
+    }
 
     const headers = { ...cors(env) };
     if (result.route) headers['X-Route'] = result.route;
