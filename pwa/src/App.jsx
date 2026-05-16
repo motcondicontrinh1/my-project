@@ -8,11 +8,12 @@ import {
   parseHeartbeat,
   parseDiagnostics,
 } from './lib/telemetry.js';
-import PinGate          from './components/PinGate.jsx';
-import StatusBar        from './components/StatusBar.jsx';
-import Controls         from './components/Controls.jsx';
-import ConfirmDialog    from './components/ConfirmDialog.jsx';
-import TroubleshootPanel from './components/TroubleshootPanel.jsx';
+import PinGate       from './components/PinGate.jsx';
+import BottomNav     from './components/BottomNav.jsx';
+import HomeTab       from './components/HomeTab.jsx';
+import MicroTab      from './components/MicroTab.jsx';
+import SettingsTab   from './components/SettingsTab.jsx';
+import ConfirmDialog from './components/ConfirmDialog.jsx';
 
 const ENV = {
   workerUrl:   import.meta.env.VITE_WORKER_URL,
@@ -24,7 +25,7 @@ const ENV = {
 };
 
 const CONFIRM_COPY = {
-  OPEN:  { title: 'Mở cửa',  message: 'Bạn chắc chắn muốn MỞ CỬA?',  confirmLabel: 'Mở',  tone: 'open'  },
+  OPEN:  { title: 'Mở cửa',   message: 'Bạn chắc chắn muốn MỞ CỬA?',   confirmLabel: 'Mở',  tone: 'open'  },
   CLOSE: { title: 'Đóng cửa', message: 'Bạn chắc chắn muốn ĐÓNG CỬA?', confirmLabel: 'Đóng', tone: 'close' },
 };
 
@@ -33,7 +34,6 @@ export default function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [pin, setPin] = useState(null);
 
-  // Enable console mirroring of every log entry as soon as we know dev mode.
   useEffect(() => {
     setVerbose(flags.dev);
     if (flags.dev) logger.info('app', 'verbose logging enabled', flags);
@@ -50,15 +50,16 @@ export default function App() {
 }
 
 function DoorApp({ flags, pin }) {
-  const [mqttConnected,    setMqttConnected]    = useState(false);
-  const [deviceStatus,     setDeviceStatus]     = useState(null);
-  const [lastCommandAck,   setLastCommandAck]   = useState(null);
-  const [lastCommandSentAt, setLastCommandSentAt] = useState(null);
-  const [lastHeartbeat,    setLastHeartbeat]    = useState(null);
-  const [lastDiagnostics,  setLastDiagnostics]  = useState(null);
-  const [busy,             setBusy]             = useState(false);
-  const [pending,          setPending]          = useState(null);
-  const [error,            setError]            = useState(null);
+  const [activeTab,          setActiveTab]          = useState('home');
+  const [mqttConnected,      setMqttConnected]      = useState(false);
+  const [deviceStatus,       setDeviceStatus]       = useState(null);
+  const [lastCommandAck,     setLastCommandAck]     = useState(null);
+  const [lastCommandSentAt,  setLastCommandSentAt]  = useState(null);
+  const [lastHeartbeat,      setLastHeartbeat]      = useState(null);
+  const [lastDiagnostics,    setLastDiagnostics]    = useState(null);
+  const [busy,               setBusy]               = useState(false);
+  const [pending,            setPending]            = useState(null);
+  const [error,              setError]              = useState(null);
 
   const clientRef = useRef(null);
 
@@ -72,7 +73,6 @@ function DoorApp({ flags, pin }) {
       logger.warn('app', 'MQTT config missing, client not started');
       return undefined;
     }
-
     const client = createDoorClient({
       url:              ENV.url,
       username:         ENV.username,
@@ -85,10 +85,7 @@ function DoorApp({ flags, pin }) {
     const offs = [
       client.on('connected',    () => { setMqttConnected(true);  setError(null); }),
       client.on('disconnected', () => { setMqttConnected(false); }),
-      client.on('deviceStatus', (s) => {
-        logger.info('telemetry', `device status: ${s}`);
-        setDeviceStatus(s);
-      }),
+      client.on('deviceStatus', (s) => { logger.info('telemetry', `device status: ${s}`); setDeviceStatus(s); }),
       client.on('lastCommand',  (raw) => {
         const parsed = parseLastCommand(raw);
         if (parsed?.cmd) logger.info('telemetry', `ack ${parsed.cmd}`, parsed);
@@ -107,33 +104,31 @@ function DoorApp({ flags, pin }) {
         else        logger.warn('telemetry', 'diagnostics parse failed', raw);
         setLastDiagnostics(parsed);
       }),
-      client.on('error',        (e) => {
+      client.on('error', (e) => {
         const msg = e?.message ?? String(e);
         logger.error('app', `mqtt error → UI: ${msg}`);
         setError(msg);
       }),
     ];
 
-    return () => {
-      offs.forEach((off) => off());
-      client.end();
-      clientRef.current = null;
-    };
+    return () => { offs.forEach((off) => off()); client.end(); clientRef.current = null; };
   }, [configValid, flags.dev]);
 
+  // Button path: STOP instant, OPEN/CLOSE require confirm dialog
   function handleCommand(cmd) {
-    if (cmd === 'STOP') {
-      void send('STOP');
-    } else {
-      logger.info('ui', `confirm requested: ${cmd}`);
-      setPending(cmd);
-    }
+    if (cmd === 'STOP') { void send('STOP'); }
+    else { logger.info('ui', `confirm requested: ${cmd}`); setPending(cmd); }
+  }
+
+  // Voice path: all commands bypass confirm dialog
+  function handleVoiceCommand(cmd) {
+    logger.info('voice', `match: ${cmd}`);
+    void send(cmd);
   }
 
   async function send(cmd) {
     setBusy(true);
-    const sentAt = Date.now();
-    setLastCommandSentAt(sentAt);
+    setLastCommandSentAt(Date.now());
     try {
       logger.info('cmd', '→ Worker ' + cmd);
       await sendCommand(cmd, pin, ENV.workerUrl);
@@ -148,22 +143,14 @@ function DoorApp({ flags, pin }) {
   }
 
   function confirmPending() {
-    const cmd = pending;
-    setPending(null);
-    if (cmd) {
-      logger.info('ui', `confirmed: ${cmd}`);
-      void send(cmd);
-    }
+    const cmd = pending; setPending(null);
+    if (cmd) { logger.info('ui', `confirmed: ${cmd}`); void send(cmd); }
   }
-
   function cancelPending() {
     if (pending) logger.info('ui', `cancelled: ${pending}`);
     setPending(null);
   }
 
-  // Preview mode hides the family-facing setup error unless dev mode is also on.
-  // This lets designers iterate on the UI without real broker creds while still
-  // letting developers see the configuration problem in dev mode.
   if (!configValid && !(flags.preview && !flags.dev)) {
     return (
       <main className="shell">
@@ -178,6 +165,12 @@ function DoorApp({ flags, pin }) {
     );
   }
 
+  const troubleshootProps = {
+    mqttConnected, deviceStatus,
+    lastCommandSentAt, lastCommandAck,
+    lastHeartbeat, lastDiagnostics,
+  };
+
   return (
     <main className="shell">
       <header className="brand">
@@ -185,29 +178,34 @@ function DoorApp({ flags, pin }) {
         <h1>Cửa Cuốn</h1>
       </header>
 
-      <StatusBar
-        mqttConnected={mqttConnected}
-        deviceStatus={deviceStatus}
-        lastCommand={lastCommandAck}
-      />
-
-      <Controls
-        onCommand={handleCommand}
-        disabled={!mqttConnected || busy}
-      />
-
-      {error && <p className="error-banner" role="alert">{error}</p>}
-
-      {flags.dev && (
-        <TroubleshootPanel
+      {activeTab === 'home' && (
+        <HomeTab
           mqttConnected={mqttConnected}
           deviceStatus={deviceStatus}
-          lastCommandSentAt={lastCommandSentAt}
-          lastCommandAck={lastCommandAck}
-          lastHeartbeat={lastHeartbeat}
-          lastDiagnostics={lastDiagnostics}
+          lastCommand={lastCommandAck}
+          onCommand={handleCommand}
+          busy={busy}
+          error={error}
         />
       )}
+
+      {activeTab === 'micro' && (
+        <MicroTab
+          onVoiceCommand={handleVoiceCommand}
+          mqttConnected={mqttConnected}
+          busy={busy}
+        />
+      )}
+
+      {activeTab === 'settings' && (
+        <SettingsTab devMode={flags.dev} {...troubleshootProps} />
+      )}
+
+      <BottomNav
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        devMode={flags.dev}
+      />
 
       <ConfirmDialog
         open={pending !== null}
@@ -218,10 +216,6 @@ function DoorApp({ flags, pin }) {
         onConfirm={confirmPending}
         onCancel={cancelPending}
       />
-
-      <footer className="foot">
-        <p>Lệnh gần nhất chỉ phản ánh lệnh đã gửi, không phải vị trí thực tế của cửa.</p>
-      </footer>
     </main>
   );
 }
