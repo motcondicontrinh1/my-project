@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 
-// Confirmation dialog used for OPEN and CLOSE per plan, Task 8.
-// STOP does not require confirmation — it must remain a single tap.
+// Bottom sheet confirmation, slides up from bottom.
+// Replaces the centered modal with a full-width sheet styled per DESIGN.md tokens.
+// STOP does not require confirmation — only OPEN and CLOSE.
 export default function ConfirmDialog({ open, title, message, confirmLabel, tone, onConfirm, onCancel }) {
   const cancelRef = useRef(null);
 
@@ -22,15 +23,26 @@ export default function ConfirmDialog({ open, title, message, confirmLabel, tone
   if (!open) return null;
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-      <div className="modal">
-        <h2 id="confirm-title" className="modal-title">{title}</h2>
-        <p className="modal-message">{message}</p>
-        <div className="modal-actions">
-          <button ref={cancelRef} type="button" className="btn btn-ghost" onClick={onCancel}>
+    <div className="sheet-backdrop" onClick={onCancel} role="presentation">
+      <div
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span className="sheet-stripe" aria-hidden="true">
+          <span /><span /><span />
+        </span>
+        <div className="sheet-body">
+          <h2 id="confirm-title" className="sheet-title">{title}</h2>
+          <p className="sheet-message">{message}</p>
+        </div>
+        <div className="sheet-actions">
+          <button ref={cancelRef} type="button" className="sheet-btn sheet-btn--ghost" onClick={onCancel}>
             Huỷ
           </button>
-          <button type="button" className={`btn btn-solid tone-${tone}`} onClick={onConfirm}>
+          <button type="button" className={`sheet-btn sheet-btn--solid tone-${tone}`} onClick={onConfirm}>
             {confirmLabel}
           </button>
         </div>

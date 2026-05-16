@@ -223,71 +223,105 @@ body { min-height: 100dvh; }
 .btn-action.tone-stop .btn-label { font-size: 36px; }
 .btn-action.tone-close { background: var(--tone-close); }
 
-/* ---- Modal --------------------------------------------------------------- */
 
-.modal-backdrop {
+/* ---- Bottom sheet (confirmation) ----------------------------------------- */
+
+@keyframes sheet-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0);    }
+}
+
+@keyframes sheet-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.sheet-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.7);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  z-index: 50;
+  align-items: flex-end;
+  justify-content: stretch;
+  z-index: 200;
+  animation: sheet-fade-in 0.2s ease-out;
 }
 
-.modal {
+.sheet {
   width: 100%;
-  max-width: 380px;
-  background: var(--surface-2);
-  border: 1px solid var(--hairline);
-  padding: 24px;
+  background: #000;             /* canvas */
+  border-top: 1px solid #3c3c3c; /* hairline */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: sheet-slide-up 0.25s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.modal-title {
-  margin: 0 0 12px;
-  font-size: 22px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.modal-message {
-  margin: 0 0 24px;
-  color: var(--body);
-  font-size: 16px;
-}
-
-.modal-actions {
+/* M tricolor stripe at top of sheet */
+.sheet-stripe {
   display: flex;
-  gap: 12px;
+  height: 4px;
+}
+.sheet-stripe span {
+  flex: 1;
+}
+.sheet-stripe span:nth-child(1) { background: #0066b1; } /* m-blue-light */
+.sheet-stripe span:nth-child(2) { background: #1c69d4; } /* m-blue-dark */
+.sheet-stripe span:nth-child(3) { background: #e22718; } /* m-red */
+
+.sheet-body {
+  padding: 24px 24px 16px;       /* lg */
 }
 
-.btn-ghost {
-  flex: 1;
-  background: transparent;
-  border: 1px solid var(--hairline);
-  color: var(--ink);
-  padding: 14px;
-  font-size: 14px;
+.sheet-title {
+  margin: 0 0 12px;              /* sm */
+  font-size: 24px;               /* title-lg */
   font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
+  line-height: 1.3;
+  color: #ffffff;                /* ink */
 }
 
-.btn-solid {
-  flex: 1;
+.sheet-message {
+  margin: 0;
+  font-size: 16px;               /* body-md */
+  font-weight: 300;
+  line-height: 1.5;
+  color: #bbbbbb;                /* body */
+}
+
+.sheet-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border-top: 1px solid #3c3c3c; /* hairline */
+}
+
+.sheet-btn {
   border: 0;
-  color: #ffffff;
-  padding: 14px;
-  font-size: 14px;
+  height: 56px;
+  font-family: inherit;
+  font-size: 14px;               /* button */
   font-weight: 700;
   letter-spacing: 1.5px;
   text-transform: uppercase;
+  cursor: pointer;
 }
 
-.btn-solid.tone-open  { background: var(--tone-open); }
-.btn-solid.tone-close { background: var(--tone-close); }
+.sheet-btn:focus-visible {
+  outline: 2px solid #0066b1;
+  outline-offset: -4px;
+}
+
+.sheet-btn--ghost {
+  background: transparent;
+  color: #bbbbbb;                /* body */
+  border-right: 1px solid #3c3c3c;
+}
+.sheet-btn--ghost:hover { color: #ffffff; }
+
+.sheet-btn--solid {
+  color: #ffffff;
+}
+.sheet-btn--solid.tone-open  { background: var(--tone-open); }
+.sheet-btn--solid.tone-close { background: var(--tone-close); }
 
 /* ---- Misc ---------------------------------------------------------------- */
 
