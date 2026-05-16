@@ -5,6 +5,10 @@ compatibility_date = "2024-11-01"
 [placement]
 mode = "smart"
 
+[observability.logs]
+enabled = true
+invocation_logs = true
+
 [vars]
 # Non-secret config. Secrets are set via: wrangler secret put <NAME>
 # Required secrets: MQTT_URL, MQTT_USERNAME, MQTT_PASSWORD, UI_PIN
